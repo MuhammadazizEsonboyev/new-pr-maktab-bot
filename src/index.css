@@ -1,0 +1,107 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --canvas: 244 246 250;
+    --card: 255 255 255;
+    --field: 241 244 249;
+    --line: 226 232 240;
+    --ink: 15 23 42;
+    --ink-soft: 71 85 105;
+    --ink-mute: 100 116 139;
+    --brand: 37 99 235;
+    --brand-dark: 29 78 216;
+    --mint: 22 163 74;
+    --mint-dark: 21 128 61;
+    --flame: 234 88 12;
+    --flame-dark: 194 65 12;
+    --grape: 124 58 237;
+    --grape-dark: 109 40 217;
+    --wrong: 220 38 38;
+    --wrong-dark: 185 28 28;
+  }
+
+  .dark {
+    --canvas: 15 20 27;
+    --card: 24 32 43;
+    --field: 17 24 33;
+    --line: 41 52 68;
+    --ink: 232 237 244;
+    --ink-soft: 180 191 204;
+    --ink-mute: 133 147 165;
+    --brand: 76 141 255;
+    --brand-dark: 122 170 255;
+    --mint: 34 197 94;
+    --mint-dark: 74 222 128;
+    --flame: 242 138 60;
+    --flame-dark: 251 166 102;
+    --grape: 160 124 250;
+    --grape-dark: 190 164 255;
+    --wrong: 240 82 82;
+    --wrong-dark: 252 129 129;
+  }
+
+  html,
+  body,
+  #root {
+    min-height: 100%;
+  }
+
+  body {
+    @apply bg-canvas font-sans text-ink antialiased;
+    -webkit-tap-highlight-color: transparent;
+    overscroll-behavior-y: none;
+  }
+
+  .nums {
+    font-variant-numeric: tabular-nums;
+  }
+
+  :focus-visible {
+    @apply outline-none ring-2 ring-brand/70 ring-offset-2 ring-offset-canvas;
+  }
+
+  input[type='number']::-webkit-inner-spin-button,
+  input[type='number']::-webkit-outer-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+  }
+  input[type='number'] {
+    -moz-appearance: textfield;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      transition-duration: 0.01ms !important;
+    }
+  }
+}
+
+@layer components {
+  .field {
+    @apply w-full rounded-xl2 border border-line bg-field px-4 py-3 text-[15px] font-semibold text-ink
+      outline-none transition placeholder:font-medium placeholder:text-ink-mute/70
+      focus:border-brand focus:bg-card focus:ring-4 focus:ring-brand/15;
+  }
+
+  .panel {
+    @apply rounded-card border border-line/70 bg-card p-4 shadow-soft;
+  }
+
+  .label {
+    @apply mb-1.5 block text-[13px] font-bold text-ink-soft;
+  }
+
+  .safe-top {
+    padding-top: calc(var(--tg-top, 0px) + 1rem);
+  }
+
+  .safe-bottom {
+    padding-bottom: calc(var(--tg-bottom, 0px) + 0.75rem);
+  }
+}
