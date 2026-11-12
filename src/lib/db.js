@@ -5,11 +5,16 @@ import { tg } from './telegram'
 const API_URL = String(import.meta.env.VITE_API_URL || '/api').trim()
 
 export class ApiError extends Error {
-  constructor(message, status) {
+  constructor(message, status, code) {
     super(message)
     this.status = status
+    this.code = code
   }
 }
+
+// Foydalanuvchi ilova ochiq turganda kanaldan chiqib ketsa, server NOT_SUBSCRIBED qaytaradi —
+// AuthContext shu hodisani tinglab obuna ekranini ko'rsatadi.
+export const NOT_SUBSCRIBED_EVENT = 'tg-not-subscribed'
 
 // Kodni xxxx-xxxx-xxxx ko'rinishiga keltiradi: registr, bo'shliq, uzun tire va
 // ko'rinmas belgilar (telefonda nusxalashda qo'shilib qoladi) e'tiborga olinmaydi.
@@ -36,7 +41,10 @@ async function call(action, data = {}) {
   if (!res.ok) {
     const fallback =
       res.status === 404 ? 'Server API topilmadi (deploy sozlamalarini tekshiring).' : 'Xatolik yuz berdi'
-    throw new ApiError(body?.error || fallback, res.status)
+    if (body?.code === 'NOT_SUBSCRIBED' && typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent(NOT_SUBSCRIBED_EVENT, { detail: body.channels || [] }))
+    }
+    throw new ApiError(body?.error || fallback, res.status, body?.code)
   }
   return body
 }
@@ -53,4 +61,7 @@ export const db = {
   deleteTest: (testId) => call('deleteTest', { testId }),
   myResults: () => call('myResults'),
   sendPdf: (pdfBase64, fileName, caption) => call('sendPdf', { pdfBase64, fileName, caption }),
+  listAdmins: () => call('listAdmins'),
+  addAdmin: (userId, name) => call('addAdmin', { userId, name }),
+  removeAdmin: (userId) => call('removeAdmin', { userId }),
 }

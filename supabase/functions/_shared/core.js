@@ -11,17 +11,21 @@
 //    3. Admin (test yaratuvchi) ro'yxatini serverda tekshiradi.
 //    4. Bazadagi funksiyalarni service_role kaliti bilan chaqiradi
 //       (anon kalit bilan ular yopiq — schema.sql ga qarang).
-//    5. O'quvchi test topshirganda ustozga bot orqali xabar yuboradi.
+//    5. Majburiy kanal obunasini tekshiradi (adminlar mustasno).
+//    6. Adminlarni boshqaradi (qo'shish / o'chirish).
+//    7. O'quvchi test topshirganda ustozga bot orqali xabar yuboradi.
+//
+//  Baza chaqiruvlari: database.js · Telegram: telegram.js · Ruxsatlar: access.js
 // =====================================================================
 
-const enc = new TextEncoder()
+import { HttpError } from './errors.js'
+import { createDb } from './database.js'
+import { createTelegram, escapeHtml } from './telegram.js'
+import { createAccess, parseChannels } from './access.js'
 
-class HttpError extends Error {
-  constructor(status, message) {
-    super(message)
-    this.status = status
-  }
-}
+export { HttpError }
+
+const enc = new TextEncoder()
 
 export function readConfig(env) {
   const get = (k) => (typeof env.get === 'function' ? env.get(k) : env[k]) ?? ''
@@ -39,6 +43,10 @@ export function readConfig(env) {
     notify: String(get('NOTIFY_OWNER') || '1') !== '0',
     webappUrl: String(get('WEBAPP_URL')).trim().replace(/\/+$/, ''),
     telegramApi: String(get('TELEGRAM_API_URL') || 'https://api.telegram.org').replace(/\/+$/, ''),
+    // Majburiy obuna kanallari: "@kanal1, -1001234567890|https://t.me/+xxxx"
+    channels: parseChannels(get('REQUIRED_CHANNELS')),
+    // Ixtiyoriy: bot webhook manzili (Supabase Edge yoki boshqa hostingda kerak bo'ladi)
+    botWebhookUrl: String(get('BOT_WEBHOOK_URL')).trim(),
   }
 }
 
@@ -149,10 +157,6 @@ function validateGiven(g) {
   return out
 }
 
-function escapeHtml(s) {
-  return String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c])
-}
-
 /* ------------------------------- handler -------------------------------- */
 
 export function createHandler(env, { fetchImpl = fetch } = {}) {
@@ -171,40 +175,10 @@ export function createHandler(env, { fetchImpl = fetch } = {}) {
       headers: { ...cors, 'Content-Type': 'application/json; charset=utf-8' },
     })
 
-  async function rpc(name, args) {
-    const headers = { apikey: cfg.serviceKey, 'Content-Type': 'application/json' }
-    // Eski (JWT) kalitlar Authorization'da ham yuboriladi; yangi sb_secret_ kalitlar faqat apikey'da.
-    if (cfg.serviceKey.startsWith('eyJ')) headers.Authorization = `Bearer ${cfg.serviceKey}`
-    let res
-    try {
-      res = await fetchImpl(`${cfg.supabaseUrl}/rest/v1/rpc/${name}`, {
-        method: 'POST',
-        headers,
-        body: JSON.stringify(args),
-      })
-    } catch {
-      throw new HttpError(502, "Bazaga ulanib bo'lmadi. Keyinroq urinib ko'ring.")
-    }
-    const text = await res.text()
-    let body = null
-    try {
-      body = text ? JSON.parse(text) : null
-    } catch {
-      body = text
-    }
-    if (!res.ok) {
-      const msg = String(body?.message || body?.error || '')
-      if (body?.code === 'PGRST202' || /Could not find the function/i.test(msg))
-        throw new HttpError(500, "Baza sxemasi o'rnatilmagan: supabase/schema.sql ni SQL Editor'da ishga tushiring.")
-      if (res.status === 401 || res.status === 403 || /permission denied|Invalid API key/i.test(msg))
-        throw new HttpError(500, "Server kaliti noto'g'ri: SUPABASE_SERVICE_ROLE_KEY ni tekshiring.")
-      // Bizning `raise exception` xabarlari P0001 kodi bilan keladi — ular foydalanuvchi uchun.
-      if (body?.code === 'P0001') throw new HttpError(400, msg)
-      console.error('RPC error', name, res.status, text)
-      throw new HttpError(500, 'Bazada xatolik yuz berdi.')
-    }
-    return body
-  }
+  const db = createDb(cfg, fetchImpl)
+  const tg = createTelegram(cfg, fetchImpl)
+  const access = createAccess(cfg, { db, tg })
+  const rpc = db.rpc
 
   async function notifyOwner(ownerId, result) {
     if (!cfg.notify || !ownerId) return
@@ -213,25 +187,13 @@ export function createHandler(env, { fetchImpl = fetch } = {}) {
       `Test: <b>${escapeHtml(result.title)}</b>\n` +
       `O'quvchi: ${escapeHtml(result.user_name)}\n` +
       `Natija: <b>${result.correct}/${result.total}</b> (${Number(result.percent).toFixed(1)}%)`
-    const body = { chat_id: ownerId, text, parse_mode: 'HTML', disable_web_page_preview: true }
+    const extra = {}
     if (cfg.webappUrl) {
-      body.reply_markup = {
+      extra.reply_markup = {
         inline_keyboard: [[{ text: '📊 Natijani ochish', web_app: { url: `${cfg.webappUrl}/#/natija/${result.id}` } }]],
       }
     }
-    try {
-      const ctrl = new AbortController()
-      const t = setTimeout(() => ctrl.abort(), 3500)
-      await fetchImpl(`${cfg.telegramApi}/bot${cfg.botToken}/sendMessage`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body),
-        signal: ctrl.signal,
-      })
-      clearTimeout(t)
-    } catch (e) {
-      console.warn('notifyOwner failed:', e?.message)
-    }
+    await tg.call('sendMessage', { chat_id: ownerId, text, parse_mode: 'HTML', disable_web_page_preview: true, ...extra }, { timeout: 3500 })
   }
 
   return async function handle(req) {
@@ -240,7 +202,7 @@ export function createHandler(env, { fetchImpl = fetch } = {}) {
 
     try {
       if (!cfg.botToken) throw new HttpError(500, 'Server sozlanmagan: BOT_TOKEN berilmagan.')
-      if (!cfg.supabaseUrl || !cfg.serviceKey)
+      if (!db.configured)
         throw new HttpError(500, 'Server sozlanmagan: SUPABASE_URL yoki SUPABASE_SERVICE_ROLE_KEY berilmagan.')
 
       const user = await verifyInitData(req.headers.get('x-telegram-init-data') || '', cfg.botToken, cfg.maxAge)
@@ -253,14 +215,33 @@ export function createHandler(env, { fetchImpl = fetch } = {}) {
         [user.first_name, user.last_name].filter(Boolean).join(' ').trim().slice(0, 80) ||
         user.username ||
         'Foydalanuvchi'
-      const isCreator = cfg.creators.has(userId)
+      // Admin bo'lmaganlar uchun kanal obunasi tekshiriladi
+      const gate = await access.gate(userId)
+      const isCreator = gate.admin
       const needCreator = () => {
         if (!isCreator) throw new HttpError(403, "Bu amal faqat admin (ustoz) uchun.")
       }
 
+      if (action === 'me') {
+        return json({
+          id: userId,
+          name,
+          username: user.username || '',
+          isCreator,
+          isSuperAdmin: access.isSuperAdmin(userId),
+          subscribed: gate.ok,
+          channels: gate.missing,
+        })
+      }
+
+      if (!gate.ok) {
+        throw new HttpError(403, "Botdan foydalanish uchun kanalimizga obuna bo'ling.", {
+          code: 'NOT_SUBSCRIBED',
+          channels: gate.missing,
+        })
+      }
+
       switch (action) {
-        case 'me':
-          return json({ id: userId, name, username: user.username || '', isCreator })
 
         case 'createTest': {
           needCreator()
@@ -335,13 +316,7 @@ export function createHandler(env, { fetchImpl = fetch } = {}) {
           form.append('chat_id', String(userId))
           form.append('caption', str(d.caption, 200) || '📄 Test natijangiz')
           form.append('document', new Blob([bin], { type: 'application/pdf' }), fileName)
-          let res
-          try {
-            res = await fetchImpl(`${cfg.telegramApi}/bot${cfg.botToken}/sendDocument`, { method: 'POST', body: form })
-          } catch {
-            throw new HttpError(502, "Telegramga ulanib bo'lmadi.")
-          }
-          const tgBody = await res.json().catch(() => null)
+          const tgBody = await tg.call('sendDocument', form, { timeout: 20000 })
           if (!tgBody?.ok) {
             if (/chat not found|bot was blocked|have no rights/i.test(tgBody?.description || ''))
               throw new HttpError(400, 'Avval botga /start yuboring, keyin qayta urinib ko‘ring.')
@@ -353,11 +328,25 @@ export function createHandler(env, { fetchImpl = fetch } = {}) {
         case 'myResults':
           return json(await rpc('my_results', { p_user_id: userId }))
 
+        /* --------------------------- adminlar --------------------------- */
+
+        case 'listAdmins':
+          needCreator()
+          return json(await access.listAdmins(userId))
+
+        case 'addAdmin':
+          needCreator()
+          return json(await access.addAdmin(userId, name, d.userId, d.name))
+
+        case 'removeAdmin':
+          needCreator()
+          return json(await access.removeAdmin(userId, d.userId))
+
         default:
           throw new HttpError(400, "Noma'lum amal.")
       }
     } catch (e) {
-      if (e instanceof HttpError) return json({ error: e.message }, e.status)
+      if (e instanceof HttpError) return json({ error: e.message, ...(e.extra || {}) }, e.status)
       console.error('Unexpected error:', e)
       return json({ error: 'Serverda kutilmagan xatolik yuz berdi.' }, 500)
     }

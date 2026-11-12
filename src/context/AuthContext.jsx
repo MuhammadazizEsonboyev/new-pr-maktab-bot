@@ -1,5 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react'
-import { db } from '../lib/db'
+import { db, NOT_SUBSCRIBED_EVENT } from '../lib/db'
 
 const AuthContext = createContext(null)
 
@@ -20,8 +20,24 @@ export function AuthProvider({ children }) {
     reload()
   }, [reload])
 
+  // Ilova ochiq turganda obuna bekor qilinsa — obuna ekraniga qaytaramiz
+  useEffect(() => {
+    const onLost = (e) =>
+      setState((s) => (s.me ? { ...s, me: { ...s.me, subscribed: false, channels: e.detail || [] } } : s))
+    window.addEventListener(NOT_SUBSCRIBED_EVENT, onLost)
+    return () => window.removeEventListener(NOT_SUBSCRIBED_EVENT, onLost)
+  }, [])
+
   const value = useMemo(
-    () => ({ ...state, isCreator: Boolean(state.me?.isCreator), reload }),
+    () => ({
+      ...state,
+      isCreator: Boolean(state.me?.isCreator),
+      isSuperAdmin: Boolean(state.me?.isSuperAdmin),
+      // Eski server javobida maydon bo'lmasa — obuna bor deb hisoblaymiz
+      subscribed: state.me?.subscribed !== false,
+      channels: state.me?.channels || [],
+      reload,
+    }),
     [state, reload]
   )
 

@@ -3,7 +3,7 @@
 //
 // Deploy:
 //   supabase functions deploy api --no-verify-jwt
-//   supabase secrets set BOT_TOKEN=... ALLOWED_CREATOR_IDS=8204982447 WEBAPP_URL=https://...
+//   supabase secrets set BOT_TOKEN=... ALLOWED_CREATOR_IDS=8204982447 WEBAPP_URL=https://... REQUIRED_CHANNELS=@kanal
 // SUPABASE_URL va SUPABASE_SERVICE_ROLE_KEY Supabase tomonidan avtomatik beriladi.
 // Frontendda: VITE_API_URL=https://<ref>.supabase.co/functions/v1/api
 

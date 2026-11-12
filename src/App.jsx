@@ -11,6 +11,8 @@ import TakeTest from './pages/TakeTest'
 import Result from './pages/Result'
 import MyResults from './pages/MyResults'
 import Gate from './pages/Gate'
+import SubscribeGate from './pages/SubscribeGate'
+import Admins from './pages/Admins'
 import { useAuth } from './context/AuthContext'
 import { getStartParam } from './lib/telegram'
 import { Loading } from './components/ui'
@@ -24,7 +26,7 @@ function CreatorOnly({ children }) {
 export default function App() {
   const navigate = useNavigate()
   const { pathname } = useLocation()
-  const { loading, me } = useAuth()
+  const { loading, me, subscribed } = useAuth()
 
   // Botdan: startapp=create | startapp=join_abcd1234ef56
   useEffect(() => {
@@ -51,6 +53,9 @@ export default function App() {
   // Server foydalanuvchini tasdiqlamadi (Telegramdan tashqarida ochilgan yoki server xatosi)
   if (!me) return <Gate />
 
+  // Kanalga obuna bo'lmagan (adminlar uchun server har doim subscribed: true qaytaradi)
+  if (!subscribed) return <SubscribeGate />
+
   return (
     <Routes>
       <Route path="/" element={<Home />} />
@@ -59,6 +64,7 @@ export default function App() {
       <Route path="/yaratildi/:token" element={<CreatorOnly><TestCreated /></CreatorOnly>} />
       <Route path="/testlarim" element={<CreatorOnly><MyTests /></CreatorOnly>} />
       <Route path="/testlarim/:id" element={<CreatorOnly><TestDetail /></CreatorOnly>} />
+      <Route path="/adminlar" element={<CreatorOnly><Admins /></CreatorOnly>} />
       <Route path="/qatnashish" element={<JoinTest />} />
       <Route path="/test/:token" element={<TakeTest />} />
       <Route path="/natija/:id" element={<Result />} />

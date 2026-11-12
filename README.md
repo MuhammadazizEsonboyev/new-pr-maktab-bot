@@ -43,6 +43,7 @@ GitHub’ga yuklang va Vercel’da import qiling. **Settings → Environment Var
 | `ALLOWED_CREATOR_IDS` | ustozlar ID si, vergul bilan: `8204982447,123456` |
 | `WEBAPP_URL` | `https://pr-bot-mini-app.vercel.app` |
 | `VITE_BOT_USERNAME` | `prezidentschool_bot` |
+| `REQUIRED_CHANNELS` | majburiy obuna kanali: `@kanal_nomi` (bot kanalda **admin** bo‘lishi shart) |
 
 So‘ng **Redeploy**. Tekshirish: `https://<sayt>/api` ga brauzerda kirsangiz
 `{"error":"Faqat POST…"}` chiqishi kerak.
@@ -63,9 +64,28 @@ https://<sayt>/api/bot?setup=1
 `"ok": true` chiqsa — bot ulandi (webhook, buyruqlar va «Menu» tugmasi sozlandi).
 Holatni tekshirish: `https://<sayt>/api/bot` → `"ulangan": true`.
 
-> `BOT_TOKEN` yoki sayt manzili o'zgarsa — `?setup=1` ni qayta oching.
-> Yangi ustoz qo'shish: u botga `/id` yozadi → ID ni Vercel'dagi `ALLOWED_CREATOR_IDS` ga
-> qo'shasiz → Redeploy.
+> `BOT_TOKEN`, sayt manzili yoki hosting o'zgarsa — `?setup=1` ni qayta oching.
+> **v2.1 ga yangilaganda ham bir marta `?setup=1` ni oching** — «✅ Obuna bo‘ldim» tugmasi
+> ishlashi uchun webhook yangilanishi kerak.
+
+### Majburiy obuna va adminlar
+
+- **Obuna:** `REQUIRED_CHANNELS=@kanal_nomi` bering, botni kanalga **admin** qiling
+  (hech qanday huquq belgilash shart emas). Obuna bo‘lmagan foydalanuvchi botda ham,
+  mini appda ham kanal havolasi va «Obuna bo‘ldim» tugmasini ko‘radi. Adminlar tekshirilmaydi.
+  `?setup=1` javobidagi `kanallar` bo‘limi bot kanalda admin ekanini ko‘rsatadi.
+- **Admin qo‘shish (Redeploy shart emas):** yangi odam botga `/id` yozadi → siz mini appda
+  «👥 Adminlar» bo‘limiga ID ni kiritasiz (yoki botda `/addadmin 123456789 Ism`).
+  Qo‘shilgan admin test yaratadi va o‘zi ham admin qo‘sha oladi. Bosh admin
+  (`ALLOWED_CREATOR_IDS`) istalgan adminni, oddiy admin faqat o‘zi qo‘shganini o‘chiradi.
+
+Hosting yoki Supabase'ni almashtirish — **[QOLLANMA.md](QOLLANMA.md)**.
+
+**Muqobil — Render (bepul Web Service):** New Web Service → shu GitHub repo →
+Root Directory: `bot`, Build: `pip install -r requirements.txt`, Start: `python bot.py`,
+Instance: Free, Environment: `BOT_TOKEN`, `WEBAPP_URL`, `ALLOWED_CREATOR_IDS`.
+Bepul servis 15 daqiqada uxlaydi — uptimerobot.com da Render manzilini har 5 daqiqada ping qiling.
+`bot.py` ishga tushganda Vercel webhook'ini o'zi uzadi.
 
 **Muqobil — Render (bepul Web Service):** New Web Service → shu GitHub repo →
 Root Directory: `bot`, Build: `pip install -r requirements.txt`, Start: `python bot.py`,
@@ -108,13 +128,18 @@ npm run dev              # http://localhost:5173 — /api ham shu yerda ishlaydi
 ```
 api/index.js                      Vercel funksiyasi (/api)
 api/bot.js                        Telegram bot, webhook (/api/bot)
-supabase/functions/_shared/core.js  Server API: initData tekshiruvi, ruxsatlar, xabarlar
+supabase/functions/_shared/core.js  Server API: initData tekshiruvi, amallar
+supabase/functions/_shared/access.js Adminlar va majburiy obuna
+supabase/functions/_shared/database.js  BARCHA baza chaqiruvlari (bazani almashtirish — shu fayl)
+supabase/functions/_shared/telegram.js  Telegram Bot API chaqiruvlari
+supabase/functions/bot/index.ts   Bot — Supabase Edge varianti
+server/index.js                   Universal Node server (Render, Railway, VPS): npm start
 supabase/functions/api/index.ts   Xuddi shu API — Supabase Edge varianti
 supabase/schema.sql               Jadvallar va funksiyalar
 supabase/functions/_shared/bot.js Bot mantiqi (webhook)
 bot/bot.py                        Muqobil: bot polling rejimida (aiogram 3)
 src/
-  pages/      Home, CreateTest, CreateAnswers, TestCreated, MyTests, TestDetail,
+  pages/      Home, Admins, SubscribeGate, CreateTest, CreateAnswers, TestCreated, MyTests, TestDetail,
               JoinTest, TakeTest, Result, MyResults, Gate
   components/ Page.jsx, ui.jsx
   context/    AuthContext (server tasdiqlagan foydalanuvchi), DraftContext
@@ -131,6 +156,7 @@ src/
 | `/test/:token` | Javob varaqasi, taymer |
 | `/natija/:id` | Natija, tahlil, PDF |
 | `/natijalarim` | Natijalar tarixi |
+| `/adminlar` | Adminlar: qo‘shish / o‘chirish |
 
 ## Xavfsizlik
 

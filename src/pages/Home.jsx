@@ -6,12 +6,13 @@ import { cx } from '../lib/utils'
 const MENU = [
   { to: '/yaratish', icon: '📝', title: 'Test yaratish', text: 'Javoblar kalitini kiriting va kod oling', tone: 'bg-brand', creator: true },
   { to: '/testlarim', icon: '📚', title: 'Mening testlarim', text: 'Kodlar, ishtirokchilar va reyting', tone: 'bg-grape', creator: true },
+  { to: '/adminlar', icon: '👥', title: 'Adminlar', text: 'Yangi admin qo‘shish va ro‘yxat', tone: 'bg-grape/20', creator: true },
   { to: '/qatnashish', icon: '🎯', title: 'Testga qatnashish', text: 'Kodni kiriting va javoblarni belgilang', tone: 'bg-mint' },
   { to: '/natijalarim', icon: '📊', title: 'Natijalarim', text: 'Topshirgan testlaringiz tarixi', tone: 'bg-flame' },
 ]
 
 export default function Home() {
-  const { me, isCreator } = useAuth()
+  const { me, isCreator, isSuperAdmin } = useAuth()
   const items = MENU.filter((m) => !m.creator || isCreator)
   const firstName = (me?.name || '').split(' ')[0]
 
@@ -28,7 +29,7 @@ export default function Home() {
           </div>
           {isCreator && (
             <span className="ml-auto rounded-full bg-grape/12 px-2.5 py-1 text-[11px] font-extrabold uppercase tracking-wide text-grape-dark">
-              Ustoz
+              {isSuperAdmin ? 'Bosh admin' : 'Admin'}
             </span>
           )}
         </div>
@@ -77,7 +78,7 @@ export default function Home() {
       </section>
 
       <footer className="mt-auto pt-8 text-center">
-        <p className="text-[12px] font-semibold text-ink-mute">Test Bot · v2.0</p>
+        <p className="text-[12px] font-semibold text-ink-mute">Test Bot · v2.1</p>
       </footer>
     </div>
   )

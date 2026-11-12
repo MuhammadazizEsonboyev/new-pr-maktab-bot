@@ -379,6 +379,70 @@ language sql security definer set search_path = public as $$
   where a.user_id = p_user_id;
 $$;
 
+-- ------------------------------- adminlar ----------------------------------
+-- Bosh adminlar (ALLOWED_CREATOR_IDS) bu jadvalda saqlanmaydi — ular hosting
+-- sozlamalarida. Bu yerda ilova/bot orqali QO'SHILGAN adminlar turadi.
+-- Kim kimni o'chira olishini server (access.js) hal qiladi va p_force orqali aytadi.
+
+create table if not exists public.admins (
+  user_id    bigint primary key,                -- Telegram user id
+  name       text,
+  added_by   bigint not null,                   -- kim qo'shgan
+  created_at timestamptz not null default now()
+);
+alter table public.admins enable row level security;
+
+create or replace function public.is_admin(p_user_id bigint)
+returns boolean
+language sql stable security definer set search_path = public as $$
+  select exists (select 1 from admins where user_id = p_user_id);
+$$;
+
+create or replace function public.list_admins()
+returns json
+language sql stable security definer set search_path = public as $$
+  select coalesce(json_agg(json_build_object(
+           'user_id', a.user_id, 'name', a.name, 'added_by', a.added_by,
+           'added_by_name', b.name, 'created_at', a.created_at,
+           'tests_count', (select count(*) from tests t where t.owner_id = a.user_id))
+           order by a.created_at), '[]')
+  from admins a left join admins b on b.user_id = a.added_by;
+$$;
+
+create or replace function public.add_admin(p_user_id bigint, p_name text, p_added_by bigint)
+returns json
+language plpgsql security definer set search_path = public as $$
+declare v admins;
+begin
+  if p_user_id is null or p_user_id <= 0 then
+    raise exception 'Telegram ID noto''g''ri';
+  end if;
+  if exists (select 1 from admins where user_id = p_user_id) then
+    raise exception 'Bu foydalanuvchi allaqachon admin';
+  end if;
+  insert into admins (user_id, name, added_by)
+  values (p_user_id, nullif(btrim(p_name), ''), p_added_by)
+  returning * into v;
+  return json_build_object('user_id', v.user_id, 'name', v.name,
+                           'added_by', v.added_by, 'created_at', v.created_at);
+end $$;
+
+create or replace function public.remove_admin(p_user_id bigint, p_by bigint, p_force boolean default false)
+returns json
+language plpgsql security definer set search_path = public as $$
+begin
+  delete from admins
+  where user_id = p_user_id and (coalesce(p_force, false) or added_by = p_by);
+  if not found then
+    if exists (select 1 from admins where user_id = p_user_id) then
+      raise exception 'Faqat o''zingiz qo''shgan adminni o''chira olasiz';
+    end if;
+    raise exception 'Bunday admin topilmadi';
+  end if;
+  -- Uning testlari o'chmaydi: qayta admin qilinsa, yana ko'radi.
+  return json_build_object('ok', true);
+end $$;
+
 -- ------------------------------ ruxsatlar ----------------------------------
 -- Supabase yangi funksiyalarga avtomatik anon/authenticated ruxsat beradi —
 -- shuning uchun ularni aniq olib tashlaymiz va faqat service_role ga beramiz.
@@ -392,7 +456,8 @@ begin
     where n.nspname = 'public'
       and p.proname in ('make_token','token_key','norm_answer','answers_equal',
                         'create_test','get_test','submit_attempt','get_attempt',
-                        'my_tests','test_attempts','set_test_active','delete_test','my_results')
+                        'my_tests','test_attempts','set_test_active','delete_test','my_results',
+                        'is_admin','list_admins','add_admin','remove_admin')
   loop
     execute format('revoke all on function %s from public', f.sig);
     if exists (select 1 from pg_roles where rolname = 'anon') then

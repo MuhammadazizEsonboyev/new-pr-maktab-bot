@@ -2,6 +2,7 @@ import { defineConfig, loadEnv } from 'vite'
 import react from '@vitejs/plugin-react'
 import { createHmac } from 'node:crypto'
 import { createHandler } from './supabase/functions/_shared/core.js'
+import { createBotHandler } from './supabase/functions/_shared/bot.js'
 
 /**
  * `npm run dev` paytida /api ni shu yerning o'zida ishga tushiradi (Vercel bilan bir xil kod).
@@ -21,8 +22,10 @@ function localApi(env) {
 }
 
 function middleware(env) {
-  const handle = createHandler(env)
+  const api = createHandler(env)
+  const bot = createBotHandler(env)
   return async (req, res) => {
+    const handle = /^\/api\/bot\/?(\?|$)/.test(req.originalUrl) ? bot : api
     const chunks = []
     for await (const c of req) chunks.push(c)
     const headers = new Headers()
