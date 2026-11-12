@@ -67,6 +67,12 @@ Holatni tekshirish: `https://<sayt>/api/bot` → `"ulangan": true`.
 > Yangi ustoz qo'shish: u botga `/id` yozadi → ID ni Vercel'dagi `ALLOWED_CREATOR_IDS` ga
 > qo'shasiz → Redeploy.
 
+**Muqobil — Render (bepul Web Service):** New Web Service → shu GitHub repo →
+Root Directory: `bot`, Build: `pip install -r requirements.txt`, Start: `python bot.py`,
+Instance: Free, Environment: `BOT_TOKEN`, `WEBAPP_URL`, `ALLOWED_CREATOR_IDS`.
+Bepul servis 15 daqiqada uxlaydi — uptimerobot.com da Render manzilini har 5 daqiqada ping qiling.
+`bot.py` ishga tushganda Vercel webhook'ini o'zi uzadi.
+
 **Muqobil:** `bot/bot.py` (aiogram, polling) — o'z serveringizda ishlatmoqchi bo'lsangiz.
 Ikkalasini birga ishlatmang: `bot.py` ni ishga tushirishdan oldin webhook'ni o'chiring
 (`https://api.telegram.org/bot<TOKEN>/deleteWebhook`).

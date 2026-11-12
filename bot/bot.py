@@ -4,6 +4,10 @@ Test Bot — Telegram bot (aiogram 3). Mini app bilan birga ishlaydi.
     pip install -r bot/requirements.txt
     python bot/bot.py              # sozlamalar loyiha ildizidagi .env dan o'qiladi
 
+Render'da (Web Service, Free):
+    Root Directory: bot · Build: pip install -r requirements.txt · Start: python bot.py
+    PORT ni Render o'zi beradi — bot kichik veb-server ochadi (UptimeRobot shu manzilni ping qiladi).
+
 Kerakli o'zgaruvchilar (.env yoki muhit):
     BOT_TOKEN            — @BotFather tokeni (server API bilan BIR XIL bo'lishi shart)
     WEBAPP_URL           — mini app manzili, masalan https://pr-bot-mini-app.vercel.app
@@ -22,6 +26,8 @@ import asyncio
 import logging
 import os
 import re
+import threading
+from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
 
 from aiogram import Bot, Dispatcher, F
@@ -200,10 +206,40 @@ def check_config() -> None:
         logging.warning("ALLOWED_CREATOR_IDS bo'sh — hech kim test yarata olmaydi.")
 
 
+class _Health(BaseHTTPRequestHandler):
+    """Render (Web Service) va UptimeRobot uchun: GET / → 200 «Bot ishlayapti»."""
+
+    def do_GET(self) -> None:
+        self.send_response(200)
+        self.send_header("Content-Type", "text/plain; charset=utf-8")
+        self.end_headers()
+        self.wfile.write("Bot ishlayapti ✅".encode())
+
+    def do_HEAD(self) -> None:
+        self.send_response(200)
+        self.end_headers()
+
+    def log_message(self, *args) -> None:  # har bir pingni logga yozmaymiz
+        pass
+
+
+def start_health_server() -> None:
+    """PORT berilgan bo'lsa (Render shunday qiladi) — kichik veb-server ochadi."""
+    port = os.environ.get("PORT")
+    if not port:
+        return
+    server = HTTPServer(("0.0.0.0", int(port)), _Health)
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    logging.info("Health server: 0.0.0.0:%s", port)
+
+
 async def main() -> None:
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
     check_config()
+    start_health_server()
     bot = Bot(BOT_TOKEN, default=DefaultBotProperties(parse_mode=ParseMode.HTML))
+    # Polling webhook bilan birga ishlamaydi: Vercel'dagi webhook ulangan bo'lsa, uzamiz.
+    await bot.delete_webhook(drop_pending_updates=False)
     await setup(bot)
     logging.info("Bot ishga tushdi. Mini app: %s | ustozlar: %s", WEBAPP_URL, sorted(CREATORS))
     await dp.start_polling(bot)
